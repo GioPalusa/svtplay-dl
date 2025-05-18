@@ -44,6 +44,7 @@ def hlsparse(config, res, url, output, **kwargs):
         yield ServiceError(f"Can't read HLS playlist. {res.status_code}")
         return
 
+    # Removed strict exit on empty master_playlist to allow subtitle fallback
     yield from _hlsparse(config, res.text, url, output, cookies=res.cookies, **kwargs)
 
 
@@ -102,14 +103,11 @@ def _hlsparse(config, text, url, output, **kwargs):
                     media[i["GROUP-ID"]].append([uri, chans, language, role, segments])
 
                 if i["TYPE"] == "SUBTITLES":
-                    if "URI" in i:
+                    if "URI" in i and i.get("LANGUAGE", "").lower() == "sv":
                         caption = None
                         if i["GROUP-ID"] not in subtitles:
                             subtitles[i["GROUP-ID"]] = []
-                        if "LANGUAGE" in i:
-                            lang = i["LANGUAGE"]
-                        else:
-                            lang = "und"
+                        lang = i["LANGUAGE"]
                         if "CHARACTERISTICS" in i:
                             caption = True
                         item = [i["URI"], lang, caption]
@@ -218,11 +216,11 @@ def _hlsparse(config, text, url, output, **kwargs):
 
         if subtitles:
             for sub in list(subtitles.keys()):
-                # Reorder to prefer Swedish subtitles
-                subtitles[sub].sort(key=lambda x: 0 if x[1].lower() == "sv" else 1)
-                for n in subtitles[sub]:
+                # Only include Swedish subtitles explicitly
+                filtered = [n for n in subtitles[sub] if n[1].lower() == "sv"]
+                for n in filtered:
                     subfix = n[1]
-                    if len(subtitles[sub]) > 1:
+                    if len(filtered) > 1:
                         if subfix and n[2]:
                             subfix = f"{n[1]}-caption"
                     try:
@@ -235,7 +233,7 @@ def _hlsparse(config, text, url, output, **kwargs):
                             **kwargs,
                         )
                     except Exception as e:
-                        print(f"[WARNING] Could not fetch subtitle {n[0]}: {e}")
+                        print(f"[WARNING] Could not fetch Swedish subtitle {n[0]}: {e}")
 
     elif m3u8.media_segment:
         config.set("segments", False)
@@ -250,6 +248,25 @@ def _hlsparse(config, text, url, output, **kwargs):
             segments=False,
         )
     else:
+        if subtitles:
+            for sub in list(subtitles.keys()):
+                filtered = [n for n in subtitles[sub] if n[1].lower() == "sv"]
+                for n in filtered:
+                    subfix = n[1]
+                    if len(filtered) > 1 and subfix and n[2]:
+                        subfix = f"{n[1]}-caption"
+                    try:
+                        yield from subtitle_probe(
+                            copy.copy(config),
+                            get_full_url(n[0], url),
+                            output=copy.copy(output),
+                            subfix=subfix,
+                            cookies=cookies,
+                            **kwargs,
+                        )
+                    except Exception as e:
+                        print(f"[WARNING] Could not fetch Swedish subtitle {n[0]}: {e}")
+            return
         yield ServiceError("Can't find HLS playlist in m3u8 file.")
 
 

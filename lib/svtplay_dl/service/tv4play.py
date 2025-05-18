@@ -57,8 +57,11 @@ class Tv4play(Service, OpenGraphThumbMixin):
 
         item = jansson["metadata"]
         if item["isDrmProtected"]:
-            yield ServiceError("We can't download DRM protected content from this site. This isn't a svtplay-dl issue.")
-            return
+            if not self.config.get("subtitle") and not self.config.get("all_subtitles"):
+                yield ServiceError("We can't download DRM protected content from this site. This isn't a svtplay-dl issue.")
+                return
+            else:
+                logging.warning("Video is DRM protected. Attempting to fetch subtitles only.")
 
         if item["isLive"]:
             self.config.set("live", True)
