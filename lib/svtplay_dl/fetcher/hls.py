@@ -218,19 +218,24 @@ def _hlsparse(config, text, url, output, **kwargs):
 
         if subtitles:
             for sub in list(subtitles.keys()):
+                # Reorder to prefer Swedish subtitles
+                subtitles[sub].sort(key=lambda x: 0 if x[1].lower() == "sv" else 1)
                 for n in subtitles[sub]:
                     subfix = n[1]
                     if len(subtitles[sub]) > 1:
                         if subfix and n[2]:
                             subfix = f"{n[1]}-caption"
-                    yield from subtitle_probe(
-                        copy.copy(config),
-                        get_full_url(n[0], url),
-                        output=copy.copy(output),
-                        subfix=subfix,
-                        cookies=cookies,
-                        **kwargs,
-                    )
+                    try:
+                        yield from subtitle_probe(
+                            copy.copy(config),
+                            get_full_url(n[0], url),
+                            output=copy.copy(output),
+                            subfix=subfix,
+                            cookies=cookies,
+                            **kwargs,
+                        )
+                    except Exception as e:
+                        print(f"[WARNING] Could not fetch subtitle {n[0]}: {e}")
 
     elif m3u8.media_segment:
         config.set("segments", False)
